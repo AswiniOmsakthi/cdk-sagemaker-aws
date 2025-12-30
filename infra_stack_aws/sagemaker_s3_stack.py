@@ -82,6 +82,13 @@ class SageMakerS3Stack(Stack):
 
         # 8. Define and Create SageMaker Pipeline
         # We generate the definition JSON locally using the SDK script
+        import sys
+        import os
+        # Add root directory to path so we can import model_code
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        if root_dir not in sys.path:
+            sys.path.append(root_dir)
+            
         from model_code.pipeline import get_pipeline
         
         # We need to render the pipeline definition to JSON

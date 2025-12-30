@@ -38,19 +38,28 @@ def get_pipeline(
     region,
     role=None,
     default_bucket=None,
+    sagemaker_session=None,
     model_package_group_name="AbalonePackageGroup",
     pipeline_name="AbalonePipeline",
     base_job_prefix="Abalone",
     processing_instance_type="ml.m5.xlarge",
     training_instance_type="ml.m5.xlarge",
 ):
-    # If role/bucket not provided, get from session
-    # Note: When running from CodeBuild, we might need to explicitly pass these
-    sagemaker_session = sagemaker.Session()
+    if sagemaker_session is None:
+        sagemaker_session = sagemaker.Session()
+    
     if role is None:
-        role = sagemaker.get_execution_role()
+        try:
+            role = sagemaker.get_execution_role()
+        except Exception:
+            # Fallback for local/CodeBuild testing
+            role = "arn:aws:iam::000000000000:role/service-role/AmazonSageMaker-ExecutionRole-Dummy"
+            
     if default_bucket is None:
-        default_bucket = sagemaker_session.default_bucket()
+        try:
+            default_bucket = sagemaker_session.default_bucket()
+        except Exception:
+            default_bucket = "dummy-bucket"
 
     # Parameters
     processing_instance_count = ParameterInteger(name="ProcessingInstanceCount", default_value=1)

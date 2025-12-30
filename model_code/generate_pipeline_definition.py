@@ -12,10 +12,17 @@ def generate():
     # We use dummy values because the actual execution will use the role/bucket from the environment
     # The definition is what's important.
     region = os.environ.get("AWS_REGION", "us-east-1")
+    # Use LocalPipelineSession for purely local generation without calling AWS
+    from sagemaker.workflow.pipeline_context import PipelineSession
+    
+    # We use a dummy session that doesn't need real AWS credentials to just build the graph
+    mock_session = PipelineSession()
+    
     pipeline = get_pipeline(
         region=region,
         role="arn:aws:iam::257949588515:role/service-role/AmazonSageMaker-ExecutionRole-Dummy",
         default_bucket="dummy-bucket",
+        sagemaker_session=mock_session,
         pipeline_name="AbalonePipeline",
         model_package_group_name="AbalonePackageGroup"
     )

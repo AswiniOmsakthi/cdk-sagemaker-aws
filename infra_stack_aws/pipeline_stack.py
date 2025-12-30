@@ -26,6 +26,7 @@ class PipelineStack(Stack):
                 input=pipelines.CodePipelineSource.git_hub(f"{repo_owner}/{repo_name}", branch),
                 commands=[
                     "pip install -r requirements.txt",
+                    "python model_code/generate_pipeline_definition.py",
                     "npm install -g aws-cdk",
                     "cdk synth"
                 ]

@@ -81,27 +81,19 @@ class SageMakerS3Stack(Stack):
         sagemaker_bucket.grant_read_write(pipeline_role)
 
         # 8. Define and Create SageMaker Pipeline
-        # We generate the definition JSON locally using the SDK script
-        import sys
+        # We read the definition JSON that was pre-generated
+        import json
         import os
-        # Add root directory to path so we can import model_code
-        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        if root_dir not in sys.path:
-            sys.path.append(root_dir)
-            
-        from model_code.pipeline import get_pipeline
         
-        # We need to render the pipeline definition to JSON
-        # Note: We pass dummy role/bucket here because the actual execution will use the ones we define in CDK
-        # or defaults. The important part is the steps structure.
-        pipeline_def = get_pipeline(
-            region=kwargs.get("env").region if kwargs.get("env") else "us-east-1",
-            role=pipeline_role.role_arn,
-            default_bucket=sagemaker_bucket.bucket_name,
-            pipeline_name="AbalonePipeline",
-            model_package_group_name="AbalonePackageGroup"
-        )
-        pipeline_definition_body = pipeline_def.definition()
+        definition_path = os.path.join(os.path.dirname(__file__), "..", "model_code", "pipeline_definition.json")
+        
+        # We use a placeholder if the file doesn't exist yet (for local synth without generation)
+        if os.path.exists(definition_path):
+            with open(definition_path, "r") as f:
+                pipeline_definition_body = f.read()
+        else:
+            # Fallback/Placeholder for initial synth if file missing
+            pipeline_definition_body = json.dumps({"Version": "2020-12-01", "Steps": []})
 
         sagemaker_pipeline = sagemaker.CfnPipeline(
             self, "AbalonePipeline",

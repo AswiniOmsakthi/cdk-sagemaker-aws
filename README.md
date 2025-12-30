@@ -1,58 +1,47 @@
+# AWS CDK SageMaker & S3 Pipeline (Python)
 
-# Welcome to your CDK Python project!
+This project automates the provisioning of an Amazon SageMaker Domain and an S3 Bucket using the AWS Cloud Development Kit (CDK) in Python. It features a self-mutating CI/CD pipeline powered by AWS CodePipeline.
 
-This is a blank project for CDK development with Python.
+## Architecture
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+*   **PipelineStack**: Sets up AWS CodePipeline + CodeBuild to verify and deploy changes automatically.
+*   **SageMakerS3Stack**: Provisions:
+    *   S3 Bucket (Versioning Enabled)
+    *   SageMaker Domain (`my-sagemaker-domain`)
+    *   Default User Profile
 
-This project is set up like a standard Python project.  The initialization
-process also creates a virtualenv within this project, stored under the `.venv`
-directory.  To create the virtualenv it assumes that there is a `python3`
-(or `python` for Windows) executable in your path with access to the `venv`
-package. If for any reason the automatic creation of the virtualenv fails,
-you can create the virtualenv manually.
+## Workflow
 
-To manually create a virtualenv on MacOS and Linux:
+This project follows a **GitOps** workflow:
 
-```
-$ python -m venv .venv
-```
+1.  **Develop**: Modify the Python code in `infra_stack_aws/`.
+2.  **Push**: Commit changes to the `main` branch.
+3.  **Deploy**: The AWS CodePipeline detects the commit, builds the project, and updates the infrastructure.
 
-After the init process completes and the virtualenv is created, you can use the following
-step to activate your virtualenv.
+## Prerequisites
 
-```
-$ source .venv/bin/activate
-```
+*   AWS CDK CLI installed (`npm install -g aws-cdk`)
+*   Python 3.9+ and `virtualenv`
+*   AWS Credentials configured for region `us-east-1`.
 
-If you are a Windows platform, you would activate the virtualenv like this:
+## Setup (Local)
 
-```
-% .venv\Scripts\activate.bat
-```
+1.  Create and activate virtual environment:
+    ```bash
+    python -m venv .venv
+    .venv\Scripts\activate
+    ```
+2.  Install dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-Once the virtualenv is activated, you can install the required dependencies.
+## Operations
 
-```
-$ pip install -r requirements.txt
-```
+*   **Monitor Pipeline**: [AWS CodePipeline Console](https://us-east-1.console.aws.amazon.com/codesuite/codepipeline/pipelines/SageMakerS3Pipeline/view?region=us-east-1)
+*   **Access SageMaker**: [SageMaker Console](https://us-east-1.console.aws.amazon.com/sagemaker/home?region=us-east-1#/domains)
 
-At this point you can now synthesize the CloudFormation template for this code.
-
-```
-$ cdk synth
-```
-
-To add additional dependencies, for example other CDK libraries, just add
-them to your `setup.py` file and rerun the `pip install -r requirements.txt`
-command.
-
-## Useful commands
-
- * `cdk ls`          list all stacks in the app
- * `cdk synth`       emits the synthesized CloudFormation template
- * `cdk deploy`      deploy this stack to your default AWS account/region
- * `cdk diff`        compare deployed stack with current state
- * `cdk docs`        open CDK documentation
-
-Enjoy!
+## Project Structure
+*   `app.py`: Entry point.
+*   `infra_stack_aws/pipeline_stack.py`: CI/CD configuration.
+*   `infra_stack_aws/sagemaker_s3_stack.py`: Infrastructure resources.

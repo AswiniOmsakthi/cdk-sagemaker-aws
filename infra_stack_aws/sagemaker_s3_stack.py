@@ -63,6 +63,49 @@ class SageMakerS3Stack(Stack):
             )
         )
 
+        # 6. Model Package Group (Model Registry)
+        model_package_group = sagemaker.CfnModelPackageGroup(
+            self, "AbaloneModelPackageGroup",
+            model_package_group_name="AbalonePackageGroup",
+            model_package_group_description="Model Package Group for Abalone Pipeline"
+        )
+        
+        # 7. IAM Role for Pipeline Execution
+        pipeline_role = iam.Role(
+            self, "SageMakerPipelineRole",
+            assumed_by=iam.ServicePrincipal("sagemaker.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSageMakerFullAccess")
+            ]
+        )
+        sagemaker_bucket.grant_read_write(pipeline_role)
+
+        # 8. Define and Create SageMaker Pipeline
+        # We generate the definition JSON locally using the SDK script
+        from model_code.pipeline import get_pipeline
+        
+        # We need to render the pipeline definition to JSON
+        # Note: We pass dummy role/bucket here because the actual execution will use the ones we define in CDK
+        # or defaults. The important part is the steps structure.
+        pipeline_def = get_pipeline(
+            region=kwargs.get("env").region if kwargs.get("env") else "us-east-1",
+            role=pipeline_role.role_arn,
+            default_bucket=sagemaker_bucket.bucket_name,
+            pipeline_name="AbalonePipeline",
+            model_package_group_name="AbalonePackageGroup"
+        )
+        pipeline_definition_body = pipeline_def.definition()
+
+        sagemaker_pipeline = sagemaker.CfnPipeline(
+            self, "AbalonePipeline",
+            pipeline_name="AbalonePipeline",
+            pipeline_definition={"PipelineDefinitionBody": pipeline_definition_body},
+            role_arn=pipeline_role.role_arn,
+            tags=[{"key": "Project", "value": "Abalone"}]
+        )
+        sagemaker_pipeline.add_dependency(model_package_group)
+
+
         # Outputs
         CfnOutput(self, "BucketName", value=sagemaker_bucket.bucket_name)
         CfnOutput(self, "SageMakerDomainId", value=sagemaker_domain.attr_domain_id)

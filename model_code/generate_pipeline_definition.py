@@ -17,13 +17,12 @@ def generate():
         region = os.environ.get("AWS_REGION", "us-east-1")
         print(f"Using region: {region}")
         
-        # Use LocalPipelineSession for purely local generation without calling AWS
+        # Use PipelineSession for purely local generation without calling AWS
         from sagemaker.workflow.pipeline_context import PipelineSession
-        print("Imported PipelineSession")
-        
-        # We use a dummy session that doesn't need real AWS credentials to just build the graph
-        mock_session = PipelineSession()
-        print("Created mock PipelineSession")
+        import boto3
+        dummy_boto_session = boto3.Session(region_name=region)
+        mock_session = PipelineSession(boto_session=dummy_boto_session)
+        print("Created mock PipelineSession with dummy boto3 session")
         
         print("Calling get_pipeline...")
         pipeline = get_pipeline(

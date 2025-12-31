@@ -92,7 +92,7 @@ def get_pipeline(
             ProcessingOutput(output_name="train", source="/opt/ml/processing/train"),
             ProcessingOutput(output_name="test", source="/opt/ml/processing/test"),
         ],
-        code=os.path.join(os.path.dirname(__file__), "preprocess.py"),
+        code="model_code/preprocess.py",
     )
 
     # 2. Training Step
@@ -165,7 +165,7 @@ def get_pipeline(
         outputs=[
             ProcessingOutput(output_name="evaluation", source="/opt/ml/processing/evaluation"),
         ],
-        code=os.path.join(os.path.dirname(__file__), "evaluate.py"),
+        code="model_code/evaluate.py",
     )
 
     # 4. Register Step

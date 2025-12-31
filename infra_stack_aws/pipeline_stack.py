@@ -27,7 +27,7 @@ class PipelineStack(Stack):
                 commands=[
                     "pip install -r requirements.txt",
                     "python3 model_code/generate_pipeline_definition.py",
-                    "cdk synth"
+                    "npx cdk synth"
                 ]
             )
         )

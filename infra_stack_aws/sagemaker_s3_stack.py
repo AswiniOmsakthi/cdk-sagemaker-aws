@@ -100,14 +100,14 @@ class SageMakerS3Stack(Stack):
             pipeline_name="AbalonePipeline",
             pipeline_definition={"PipelineDefinitionBody": pipeline_definition_body},
             role_arn=pipeline_role.role_arn,
-            pipeline_definition_parameters=[
-                {
-                    "name": "ExecutionRole",
-                    "value": pipeline_role.role_arn
-                }
-            ],
             tags=[{"key": "Project", "value": "Abalone"}]
         )
+        sagemaker_pipeline.add_property_override("PipelineDefinitionParameters", [
+            {
+                "Name": "ExecutionRole",
+                "Value": pipeline_role.role_arn
+            }
+        ])
         sagemaker_pipeline.add_dependency(model_package_group)
 
 

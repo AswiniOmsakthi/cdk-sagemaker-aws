@@ -11,7 +11,12 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
 # Since we are running in SageMaker Processing, we might need to install libraries if not present in the container
-# But usually sklearn is present in the standard pre-built images.
+import logging
+import scipy.sparse
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler())
 
 def merge_two_dicts(x, y):
     z = x.copy()
@@ -27,7 +32,17 @@ if __name__ == "__main__":
 
     input_data_path = os.path.join("/opt/ml/processing/input", "abalone.csv")
     
-    print("Reading input data from {}".format(input_data_path))
+    if not os.path.exists(input_data_path):
+        logger.error(f"Input data not found at {input_data_path}")
+        # List files in the directory to help debug
+        input_dir = "/opt/ml/processing/input"
+        if os.path.exists(input_dir):
+            logger.info(f"Files in {input_dir}: {os.listdir(input_dir)}")
+        else:
+            logger.error(f"Input directory {input_dir} does not exist!")
+        raise FileNotFoundError(f"Missing input file: {input_data_path}")
+
+    logger.info("Reading input data from {}".format(input_data_path))
     df = pd.read_csv(input_data_path, header=None)
     df.columns = [
         "sex",
@@ -95,9 +110,18 @@ if __name__ == "__main__":
     y_train = train.pop(target)
     X_train_pre = preprocessor.fit_transform(train)
     
+    # Handle sparse matrix if returned by ColumnTransformer
+    if scipy.sparse.issparse(X_train_pre):
+        logger.info("Converting sparse training matrix to dense.")
+        X_train_pre = X_train_pre.toarray()
+    
     # Transform Test
     y_test = test.pop(target)
     X_test_pre = preprocessor.transform(test)
+    
+    if scipy.sparse.issparse(X_test_pre):
+        logger.info("Converting sparse test matrix to dense.")
+        X_test_pre = X_test_pre.toarray()
     
     # Combine for output (SageMaker Training expects CSV with target in first column)
     train_output = pd.DataFrame(X_train_pre)

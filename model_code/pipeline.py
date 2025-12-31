@@ -32,7 +32,8 @@ from sagemaker.workflow.retry import (
 from sagemaker.model_metrics import MetricsSource, ModelMetrics
 from sagemaker.workflow.condition_step import ConditionStep
 from sagemaker.workflow.conditions import ConditionLessThanOrEqualTo
-from sagemaker.workflow.functions import JsonGet
+from sagemaker.workflow.properties import PropertyFile
+from sagemaker.workflow.functions import JsonGet, Join
 
 def get_pipeline(
     region,
@@ -166,13 +167,24 @@ def get_pipeline(
             ProcessingOutput(output_name="evaluation", source="/opt/ml/processing/evaluation"),
         ],
         code="model_code/evaluate.py",
+        property_files=[
+            PropertyFile(
+                name="evaluation",
+                output_name="evaluation",
+                path="evaluation.json"
+            )
+        ]
     )
 
     # 4. Register Step
     model_metrics = ModelMetrics(
         model_statistics=MetricsSource(
-            s3_uri="{}/evaluation.json".format(
-                step_eval.arguments["ProcessingOutputConfig"]["Outputs"][0]["S3Output"]["S3Uri"]
+            s3_uri=Join(
+                on="/",
+                values=[
+                    step_eval.properties.ProcessingOutputConfig.Outputs["evaluation"].S3Output.S3Uri,
+                    "evaluation.json",
+                ],
             ),
             content_type="application/json",
         )
@@ -194,8 +206,8 @@ def get_pipeline(
     # Condition Step
     cond_lte = ConditionLessThanOrEqualTo(
         left=JsonGet(
-            step_name=step_eval.name,
-            property_file=step_eval.properties.ProcessingOutputConfig.Outputs["evaluation"].S3Output.S3Uri,
+            step_name="EvaluateModel",
+            property_file=step_eval.property_files[0],
             json_path="regression_metrics.mse.value",
         ),
         right=mse_threshold,

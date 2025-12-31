@@ -79,6 +79,15 @@ class SageMakerS3Stack(Stack):
             ]
         )
         sagemaker_bucket.grant_read_write(pipeline_role)
+        
+        # Grant access to public S3 for sample data
+        pipeline_role.add_to_policy(iam.PolicyStatement(
+            actions=["s3:GetObject", "s3:ListBucket"],
+            resources=[
+                "arn:aws:s3:::sagemaker-sample-files",
+                "arn:aws:s3:::sagemaker-sample-files/*"
+            ]
+        ))
 
         # 8. Define and Create SageMaker Pipeline
         # We read the definition JSON that was pre-generated
@@ -129,6 +138,10 @@ class SageMakerS3Stack(Stack):
             tags=[{"key": "Project", "value": "Abalone"}]
         )
         sagemaker_pipeline.add_dependency(model_package_group)
+
+        # Grant the role permission to read the assets
+        preprocess_asset.grant_read(pipeline_role)
+        evaluate_asset.grant_read(pipeline_role)
 
 
         # Outputs

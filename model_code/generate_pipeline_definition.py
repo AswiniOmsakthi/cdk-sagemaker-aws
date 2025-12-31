@@ -22,7 +22,13 @@ def generate():
         import boto3
         dummy_boto_session = boto3.Session(region_name=region)
         mock_session = PipelineSession(boto_session=dummy_boto_session)
-        print("Created mock PipelineSession with dummy boto3 session")
+        # Mock default_bucket to prevent HeadBucket calls in CodeBuild
+        mock_session.default_bucket = lambda: "dummy-bucket"
+        # Mock upload_data to prevent actual S3 uploads during generation
+        def mock_upload(path, bucket=None, key_prefix="data", **kwargs):
+            return f"s3://{bucket or 'dummy-bucket'}/{key_prefix}/{os.path.basename(path)}"
+        mock_session.upload_data = mock_upload
+        print("Created mock PipelineSession with dummy boto3 session and flexible S3 mocks")
         
         print("Calling get_pipeline...")
         pipeline = get_pipeline(

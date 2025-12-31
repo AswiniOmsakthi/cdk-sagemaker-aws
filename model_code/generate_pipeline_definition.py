@@ -8,32 +8,48 @@ sys.path.append(os.path.dirname(__file__))
 
 from pipeline import get_pipeline
 
+
 def generate():
-    # We use dummy values because the actual execution will use the role/bucket from the environment
-    # The definition is what's important.
-    region = os.environ.get("AWS_REGION", "us-east-1")
-    # Use LocalPipelineSession for purely local generation without calling AWS
-    from sagemaker.workflow.pipeline_context import PipelineSession
-    
-    # We use a dummy session that doesn't need real AWS credentials to just build the graph
-    mock_session = PipelineSession()
-    
-    pipeline = get_pipeline(
-        region=region,
-        role="arn:aws:iam::257949588515:role/service-role/AmazonSageMaker-ExecutionRole-Dummy",
-        default_bucket="dummy-bucket",
-        sagemaker_session=mock_session,
-        pipeline_name="AbalonePipeline",
-        model_package_group_name="AbalonePackageGroup"
-    )
-    
-    definition = pipeline.definition()
-    
-    output_path = os.path.join(os.path.dirname(__file__), "pipeline_definition.json")
-    with open(output_path, "w") as f:
-        f.write(definition)
-    
-    print(f"Pipeline definition generated at {output_path}")
+    try:
+        print("Starting pipeline generation...")
+        # We use dummy values because the actual execution will use the role/bucket from the environment
+        # The definition is what's important.
+        region = os.environ.get("AWS_REGION", "us-east-1")
+        print(f"Using region: {region}")
+        
+        # Use LocalPipelineSession for purely local generation without calling AWS
+        from sagemaker.workflow.pipeline_context import PipelineSession
+        print("Imported PipelineSession")
+        
+        # We use a dummy session that doesn't need real AWS credentials to just build the graph
+        mock_session = PipelineSession()
+        print("Created mock PipelineSession")
+        
+        print("Calling get_pipeline...")
+        pipeline = get_pipeline(
+            region=region,
+            role="arn:aws:iam::257949588515:role/service-role/AmazonSageMaker-ExecutionRole-Dummy",
+            default_bucket="dummy-bucket",
+            sagemaker_session=mock_session,
+            pipeline_name="AbalonePipeline",
+            model_package_group_name="AbalonePackageGroup"
+        )
+        print("Pipeline object created")
+        
+        print("Generating definition JSON...")
+        definition = pipeline.definition()
+        print("Definition JSON generated")
+        
+        output_path = os.path.join(os.path.dirname(__file__), "pipeline_definition.json")
+        with open(output_path, "w") as f:
+            f.write(definition)
+        
+        print(f"Pipeline definition generated successfully at {output_path}")
+    except Exception as e:
+        print(f"FAILED to generate pipeline definition: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 if __name__ == "__main__":
     generate()

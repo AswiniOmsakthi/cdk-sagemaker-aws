@@ -100,13 +100,17 @@ class SageMakerS3Stack(Stack):
         preprocess_asset = s3_assets.Asset(self, "PreprocessAsset", path=os.path.join(os.path.dirname(__file__), "..", "model_code", "preprocess.py"))
         evaluate_asset = s3_assets.Asset(self, "EvaluateAsset", path=os.path.join(os.path.dirname(__file__), "..", "model_code", "evaluate.py"))
 
-        # Replace placeholders in the JSON with real S3 URIs
-        pipeline_definition_body = pipeline_definition_body.replace(
-            "s3://placeholder-bucket/preprocess.py",
-            f"s3://{preprocess_asset.s3_bucket_name}/{preprocess_asset.s3_object_key}"
-        ).replace(
-            "s3://placeholder-bucket/evaluate.py",
-            f"s3://{evaluate_asset.s3_bucket_name}/{evaluate_asset.s3_object_key}"
+        # Replace placeholders in the JSON with real S3 URIs using regex to find any dummy S3 paths
+        import re
+        pipeline_definition_body = re.sub(
+            r's3://[^"]+/preprocess\.py',
+            f"s3://{preprocess_asset.s3_bucket_name}/{preprocess_asset.s3_object_key}",
+            pipeline_definition_body
+        )
+        pipeline_definition_body = re.sub(
+            r's3://[^"]+/evaluate\.py',
+            f"s3://{evaluate_asset.s3_bucket_name}/{evaluate_asset.s3_object_key}",
+            pipeline_definition_body
         )
 
         sagemaker_pipeline = sagemaker.CfnPipeline(

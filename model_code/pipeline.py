@@ -72,6 +72,8 @@ def get_pipeline(
         default_value=f"s3://sagemaker-sample-files/datasets/tabular/abalone/abalone.csv",
     )
     execution_role = ParameterString(name="ExecutionRole", default_value=role)
+    preprocess_code = "s3://placeholder-bucket/preprocess.py"
+    evaluate_code = "s3://placeholder-bucket/evaluate.py"
     mse_threshold = ParameterFloat(name="MseThreshold", default_value=6.0)
 
     # 1. Processing Step
@@ -94,7 +96,7 @@ def get_pipeline(
             ProcessingOutput(output_name="train", source="/opt/ml/processing/train"),
             ProcessingOutput(output_name="test", source="/opt/ml/processing/test"),
         ],
-        code="model_code/preprocess.py",
+        code=preprocess_code,
     )
 
     # 2. Training Step
@@ -167,7 +169,7 @@ def get_pipeline(
         outputs=[
             ProcessingOutput(output_name="evaluation", source="/opt/ml/processing/evaluation"),
         ],
-        code="model_code/evaluate.py",
+        code=evaluate_code,
         property_files=[
             PropertyFile(
                 name="evaluation",

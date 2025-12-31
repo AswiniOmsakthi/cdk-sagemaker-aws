@@ -95,6 +95,20 @@ class SageMakerS3Stack(Stack):
             # Fallback/Placeholder for initial synth if file missing
             pipeline_definition_body = json.dumps({"Version": "2020-12-01", "Steps": []})
 
+        from aws_cdk import aws_s3_assets as s3_assets
+
+        preprocess_asset = s3_assets.Asset(self, "PreprocessAsset", path=os.path.join(os.path.dirname(__file__), "..", "model_code", "preprocess.py"))
+        evaluate_asset = s3_assets.Asset(self, "EvaluateAsset", path=os.path.join(os.path.dirname(__file__), "..", "model_code", "evaluate.py"))
+
+        # Replace placeholders in the JSON with real S3 URIs
+        pipeline_definition_body = pipeline_definition_body.replace(
+            "s3://placeholder-bucket/preprocess.py",
+            f"s3://{preprocess_asset.s3_bucket_name}/{preprocess_asset.s3_object_key}"
+        ).replace(
+            "s3://placeholder-bucket/evaluate.py",
+            f"s3://{evaluate_asset.s3_bucket_name}/{evaluate_asset.s3_object_key}"
+        )
+
         sagemaker_pipeline = sagemaker.CfnPipeline(
             self, "AbalonePipeline",
             pipeline_name="AbalonePipeline",

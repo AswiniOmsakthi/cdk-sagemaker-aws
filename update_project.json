@@ -1,0 +1,7 @@
+{
+    "name": "PipelineBuildSynthCdkBuildP-JEc986SUUVgg",
+    "source": {
+        "type": "CODEPIPELINE",
+        "buildspec": "{\n  \"version\": \"0.2\",\n  \"phases\": {\n    \"build\": {\n      \"commands\": [\n        \"pip install -r requirements.txt\",\n        \"python3 model_code/generate_pipeline_definition.py\",\n        \"npx cdk synth\"\n      ]\n    }\n  },\n  \"artifacts\": {\n    \"base-directory\": \"cdk.out\",\n    \"files\": \"**/*\"\n  }\n}"
+    }
+}

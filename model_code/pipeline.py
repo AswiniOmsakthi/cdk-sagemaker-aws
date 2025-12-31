@@ -71,6 +71,7 @@ def get_pipeline(
         name="InputDataUrl",
         default_value=f"s3://sagemaker-sample-files/datasets/tabular/abalone/abalone.csv",
     )
+    execution_role = ParameterString(name="ExecutionRole", default_value=role)
     mse_threshold = ParameterFloat(name="MseThreshold", default_value=6.0)
 
     # 1. Processing Step
@@ -79,7 +80,7 @@ def get_pipeline(
         instance_type=processing_instance_type,
         instance_count=processing_instance_count,
         base_job_name=f"{base_job_prefix}-process",
-        role=role,
+        role=execution_role,
         sagemaker_session=sagemaker_session,
     )
     
@@ -110,7 +111,7 @@ def get_pipeline(
         instance_type=training_instance_type,
         instance_count=1,
         output_path=f"s3://{default_bucket}/{base_job_prefix}/output",
-        role=role,
+        role=execution_role,
         sagemaker_session=sagemaker_session,
     )
     
@@ -144,7 +145,7 @@ def get_pipeline(
         instance_type=processing_instance_type,
         instance_count=1,
         base_job_name=f"{base_job_prefix}-eval",
-        role=role,
+        role=execution_role,
         sagemaker_session=sagemaker_session,
     )
     
@@ -228,6 +229,7 @@ def get_pipeline(
             model_approval_status,
             input_data,
             mse_threshold,
+            execution_role,
         ],
         steps=[step_process, step_train, step_eval, step_cond],
     )

@@ -1,0 +1,16 @@
+{
+    "version": "0.2",
+    "phases": {
+        "build": {
+            "commands": [
+                "pip install -r requirements.txt",
+                "python3 model_code/generate_pipeline_definition.py",
+                "npx cdk synth"
+            ]
+        }
+    },
+    "artifacts": {
+        "base-directory": "cdk.out",
+        "files": "**/*"
+    }
+}

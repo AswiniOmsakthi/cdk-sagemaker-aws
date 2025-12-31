@@ -112,6 +112,14 @@ class SageMakerS3Stack(Stack):
             f"s3://{evaluate_asset.s3_bucket_name}/{evaluate_asset.s3_object_key}",
             pipeline_definition_body
         )
+        # Replace the dummy execution role
+        pipeline_definition_body = re.sub(
+            r'arn:aws:iam::\d+:role/service-role/AmazonSageMaker-ExecutionRole-Dummy',
+            pipeline_role.role_arn,
+            pipeline_definition_body
+        )
+        # Replace dummy bucket name
+        pipeline_definition_body = pipeline_definition_body.replace("dummy-bucket", sagemaker_bucket.bucket_name)
 
         sagemaker_pipeline = sagemaker.CfnPipeline(
             self, "AbalonePipeline",
@@ -120,12 +128,6 @@ class SageMakerS3Stack(Stack):
             role_arn=pipeline_role.role_arn,
             tags=[{"key": "Project", "value": "Abalone"}]
         )
-        sagemaker_pipeline.add_property_override("PipelineDefinitionParameters", [
-            {
-                "Name": "ExecutionRole",
-                "Value": pipeline_role.role_arn
-            }
-        ])
         sagemaker_pipeline.add_dependency(model_package_group)
 
 

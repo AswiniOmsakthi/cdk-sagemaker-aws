@@ -88,6 +88,11 @@ class SageMakerS3Stack(Stack):
                 "arn:aws:s3:::sagemaker-sample-files/*"
             ]
         ))
+        # Add PassRole so the service role can pass the execution role to steps
+        pipeline_role.add_to_policy(iam.PolicyStatement(
+            actions=["iam:PassRole"],
+            resources=[pipeline_role.role_arn]
+        ))
 
         # 8. Define and Create SageMaker Pipeline
         # We read the definition JSON that was pre-generated

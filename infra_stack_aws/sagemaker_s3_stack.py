@@ -130,6 +130,15 @@ class SageMakerS3Stack(Stack):
         # Replace dummy bucket name
         pipeline_definition_body = pipeline_definition_body.replace("dummy-bucket", sagemaker_bucket.bucket_name)
 
+        # Fix entrypoint filenames to match the hashed asset filename in S3
+        pipeline_definition_body = pipeline_definition_body.replace(
+            "/opt/ml/processing/input/code/preprocess.py",
+            f"/opt/ml/processing/input/code/{preprocess_asset.s3_object_key}"
+        ).replace(
+            "/opt/ml/processing/input/code/evaluate.py",
+            f"/opt/ml/processing/input/code/{evaluate_asset.s3_object_key}"
+        )
+
         sagemaker_pipeline = sagemaker.CfnPipeline(
             self, "AbalonePipeline",
             pipeline_name="AbalonePipeline",

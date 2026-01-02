@@ -20,7 +20,11 @@ if __name__ == "__main__":
     # Paths in the processing container
     model_path = "/opt/ml/processing/model/model.tar.gz"
     test_path = "/opt/ml/processing/test/test.csv"
-    output_path = "/opt/ml/processing/evaluation/evaluation.json"
+    evaluation_dir = "/opt/ml/processing/evaluation"
+    output_path = os.path.join(evaluation_dir, "evaluation.json")
+    
+    # Ensure output directory exists
+    os.makedirs(evaluation_dir, exist_ok=True)
 
     logger.info("Loading model.")
     with tarfile.open(model_path) as tar:

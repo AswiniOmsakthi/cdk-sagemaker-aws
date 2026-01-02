@@ -81,17 +81,45 @@ class SageMakerS3Stack(Stack):
         sagemaker_bucket.grant_read_write(pipeline_role)
         
         # Grant access to public S3 for sample data
+        # Note: sagemaker-sample-files is a public bucket, but we still need explicit permissions
         pipeline_role.add_to_policy(iam.PolicyStatement(
-            actions=["s3:GetObject", "s3:ListBucket"],
+            actions=[
+                "s3:GetObject",
+                "s3:GetObjectVersion",
+                "s3:ListBucket",
+                "s3:ListBucketMultipartUploads",
+                "s3:ListMultipartUploadParts"
+            ],
             resources=[
                 "arn:aws:s3:::sagemaker-sample-files",
                 "arn:aws:s3:::sagemaker-sample-files/*"
             ]
         ))
+        
+        # Grant access to CDK assets bucket (where preprocess.py and evaluate.py are stored)
+        pipeline_role.add_to_policy(iam.PolicyStatement(
+            actions=["s3:GetObject", "s3:ListBucket"],
+            resources=[
+                f"arn:aws:s3:::cdk-hnb659fds-assets-{self.account}-{self.region}",
+                f"arn:aws:s3:::cdk-hnb659fds-assets-{self.account}-{self.region}/*"
+            ]
+        ))
+        
         # Add PassRole so the service role can pass the execution role to steps
         pipeline_role.add_to_policy(iam.PolicyStatement(
             actions=["iam:PassRole"],
             resources=[pipeline_role.role_arn]
+        ))
+        
+        # Grant CloudWatch Logs permissions for processing jobs
+        pipeline_role.add_to_policy(iam.PolicyStatement(
+            actions=[
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+                "logs:DescribeLogStreams"
+            ],
+            resources=["*"]
         ))
 
         # 8. Define and Create SageMaker Pipeline
@@ -134,14 +162,38 @@ class SageMakerS3Stack(Stack):
         )
         # Replace dummy bucket name
         pipeline_definition_body = pipeline_definition_body.replace("dummy-bucket", sagemaker_bucket.bucket_name)
+        
+        # Replace the input data URL to use our bucket instead of sagemaker-sample-files
+        pipeline_definition_body = re.sub(
+            r's3://sagemaker-sample-files/datasets/tabular/abalone/abalone\.csv',
+            f"s3://{sagemaker_bucket.bucket_name}/datasets/abalone/abalone.csv",
+            pipeline_definition_body
+        )
 
         # Fix entrypoint filenames to match the hashed asset filename in S3
+        # Extract just the filename from the S3 object key (in case it has a path)
+        preprocess_filename = os.path.basename(preprocess_asset.s3_object_key)
+        evaluate_filename = os.path.basename(evaluate_asset.s3_object_key)
+        
+        # Replace entrypoint paths - handle both with and without .py extension
+        pipeline_definition_body = re.sub(
+            r'"/opt/ml/processing/input/code/preprocess\.py"',
+            f'"/opt/ml/processing/input/code/{preprocess_filename}"',
+            pipeline_definition_body
+        )
+        pipeline_definition_body = re.sub(
+            r'"/opt/ml/processing/input/code/evaluate\.py"',
+            f'"/opt/ml/processing/input/code/{evaluate_filename}"',
+            pipeline_definition_body
+        )
+        # Also handle cases without quotes (in case JSON structure is different)
         pipeline_definition_body = pipeline_definition_body.replace(
             "/opt/ml/processing/input/code/preprocess.py",
-            f"/opt/ml/processing/input/code/{preprocess_asset.s3_object_key}"
-        ).replace(
+            f"/opt/ml/processing/input/code/{preprocess_filename}"
+        )
+        pipeline_definition_body = pipeline_definition_body.replace(
             "/opt/ml/processing/input/code/evaluate.py",
-            f"/opt/ml/processing/input/code/{evaluate_asset.s3_object_key}"
+            f"/opt/ml/processing/input/code/{evaluate_filename}"
         )
 
         sagemaker_pipeline = sagemaker.CfnPipeline(
@@ -157,7 +209,31 @@ class SageMakerS3Stack(Stack):
         preprocess_asset.grant_read(pipeline_role)
         evaluate_asset.grant_read(pipeline_role)
 
+        # Add custom resource to automatically start pipeline execution after deployment
+        from aws_cdk import custom_resources as cr
+        
+        # Custom resource to trigger pipeline execution
+        pipeline_trigger = cr.AwsCustomResource(
+            self, "PipelineTrigger",
+            on_create=cr.AwsSdkCall(
+                service="SageMaker",
+                action="startPipelineExecution",
+                parameters={"PipelineName": sagemaker_pipeline.pipeline_name},
+                physical_resource_id=cr.PhysicalResourceId.of(f"{sagemaker_pipeline.pipeline_name}-{self.account}")
+            ),
+            on_update=cr.AwsSdkCall(
+                service="SageMaker",
+                action="startPipelineExecution",
+                parameters={"PipelineName": sagemaker_pipeline.pipeline_name},
+                physical_resource_id=cr.PhysicalResourceId.of(f"{sagemaker_pipeline.pipeline_name}-{self.account}")
+            ),
+            policy=cr.AwsCustomResourcePolicy.from_sdk_calls(
+                resources=[f"arn:aws:sagemaker:{self.region}:{self.account}:pipeline/{sagemaker_pipeline.pipeline_name}"]
+            )
+        )
+        pipeline_trigger.node.add_dependency(sagemaker_pipeline)
 
         # Outputs
         CfnOutput(self, "BucketName", value=sagemaker_bucket.bucket_name)
         CfnOutput(self, "SageMakerDomainId", value=sagemaker_domain.attr_domain_id)
+        CfnOutput(self, "PipelineName", value=sagemaker_pipeline.pipeline_name)

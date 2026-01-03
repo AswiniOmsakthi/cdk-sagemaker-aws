@@ -2,10 +2,15 @@ from aws_cdk import (
     Stack,
     RemovalPolicy,
     CfnOutput,
+    Duration,
     aws_s3 as s3,
     aws_ec2 as ec2,
     aws_iam as iam,
     aws_sagemaker as sagemaker,
+    aws_lambda as lambda_,
+    aws_events as events,
+    aws_events_targets as targets,
+    aws_logs as logs,
 )
 from constructs import Construct
 
@@ -209,10 +214,11 @@ class SageMakerS3Stack(Stack):
         preprocess_asset.grant_read(pipeline_role)
         evaluate_asset.grant_read(pipeline_role)
 
-        # Add custom resource to automatically start pipeline execution after deployment
+        # Add custom resource to automatically start pipeline execution after initial deployment only
+        # Note: We only trigger on create to avoid cancelling running executions on updates
         from aws_cdk import custom_resources as cr
         
-        # Custom resource to trigger pipeline execution
+        # Custom resource to trigger pipeline execution (only on create, not on update)
         pipeline_trigger = cr.AwsCustomResource(
             self, "PipelineTrigger",
             on_create=cr.AwsSdkCall(
@@ -221,19 +227,171 @@ class SageMakerS3Stack(Stack):
                 parameters={"PipelineName": sagemaker_pipeline.pipeline_name},
                 physical_resource_id=cr.PhysicalResourceId.of(f"{sagemaker_pipeline.pipeline_name}-{self.account}")
             ),
-            on_update=cr.AwsSdkCall(
-                service="SageMaker",
-                action="startPipelineExecution",
-                parameters={"PipelineName": sagemaker_pipeline.pipeline_name},
-                physical_resource_id=cr.PhysicalResourceId.of(f"{sagemaker_pipeline.pipeline_name}-{self.account}")
-            ),
+            # Only trigger on create, not on update to avoid cancelling running executions
             policy=cr.AwsCustomResourcePolicy.from_sdk_calls(
                 resources=[f"arn:aws:sagemaker:{self.region}:{self.account}:pipeline/{sagemaker_pipeline.pipeline_name}"]
             )
         )
         pipeline_trigger.node.add_dependency(sagemaker_pipeline)
 
+        # 9. Automatic Model Deployment on Approval
+        # Lambda function to deploy approved model to endpoint
+        deploy_lambda = lambda_.Function(
+            self, "ModelDeploymentFunction",
+            runtime=lambda_.Runtime.PYTHON_3_11,
+            handler="index.handler",
+            timeout=Duration.minutes(15),
+            environment={
+                "EXECUTION_ROLE_ARN": pipeline_role.role_arn,
+                "REGION": self.region
+            },
+            code=lambda_.Code.from_inline("""
+import json
+import boto3
+import os
+import time
+
+region = os.environ.get('REGION', 'us-east-1')
+execution_role_arn = os.environ.get('EXECUTION_ROLE_ARN')
+sagemaker = boto3.client('sagemaker', region_name=region)
+
+def handler(event, context):
+    print(f"Received event: {json.dumps(event)}")
+    
+    # Extract model package ARN from the event
+    model_package_arn = event.get('detail', {}).get('ModelPackageArn', '')
+    model_package_group_name = event.get('detail', {}).get('ModelPackageGroupName', '')
+    
+    if not model_package_arn:
+        print("No ModelPackageArn found in event")
+        return {"statusCode": 400, "body": "Missing ModelPackageArn"}
+    
+    try:
+        # Get model package details
+        model_package = sagemaker.describe_model_package(ModelPackageName=model_package_arn)
+        model_approval_status = model_package.get('ModelApprovalStatus', '')
+        
+        print(f"Model Package ARN: {model_package_arn}")
+        print(f"Approval Status: {model_approval_status}")
+        
+        if model_approval_status != 'Approved':
+            print(f"Model not approved. Status: {model_approval_status}")
+            return {"statusCode": 200, "body": f"Model not approved. Status: {model_approval_status}"}
+        
+        # Get the model data
+        model_data_url = model_package['InferenceSpecification']['Containers'][0]['ModelDataUrl']
+        image_uri = model_package['InferenceSpecification']['Containers'][0]['Image']
+        
+        endpoint_config_name = f"abalone-endpoint-config-{int(time.time())}"
+        endpoint_name = "abalone-endpoint"
+        model_name = f"abalone-model-{int(time.time())}"
+        
+        # Create model
+        print(f"Creating model: {model_name}")
+        sagemaker.create_model(
+            ModelName=model_name,
+            PrimaryContainer={
+                'Image': image_uri,
+                'ModelDataUrl': model_data_url
+            },
+            ExecutionRoleArn=execution_role_arn
+        )
+        
+        # Create endpoint configuration
+        print(f"Creating endpoint config: {endpoint_config_name}")
+        sagemaker.create_endpoint_configuration(
+            EndpointConfigName=endpoint_config_name,
+            ProductionVariants=[{
+                'VariantName': 'AllTraffic',
+                'ModelName': model_name,
+                'InstanceType': 'ml.m5.large',
+                'InitialInstanceCount': 1,
+                'InitialVariantWeight': 1.0
+            }]
+        )
+        
+        # Check if endpoint exists, if not create it, else update it
+        try:
+            sagemaker.describe_endpoint(EndpointName=endpoint_name)
+            print(f"Updating existing endpoint: {endpoint_name}")
+            sagemaker.update_endpoint(
+                EndpointName=endpoint_name,
+                EndpointConfigName=endpoint_config_name
+            )
+        except sagemaker.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == 'ValidationException':
+                print(f"Creating new endpoint: {endpoint_name}")
+                sagemaker.create_endpoint(
+                    EndpointName=endpoint_name,
+                    EndpointConfigName=endpoint_config_name
+                )
+            else:
+                raise
+        
+        print(f"Deployment initiated for endpoint: {endpoint_name}")
+        return {
+            "statusCode": 200,
+            "body": json.dumps({
+                "message": "Deployment initiated",
+                "endpoint_name": endpoint_name,
+                "endpoint_config": endpoint_config_name,
+                "model_name": model_name
+            })
+        }
+        
+    except Exception as e:
+        print(f"Error deploying model: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {"statusCode": 500, "body": f"Error: {str(e)}"}
+"""),
+            log_retention=logs.RetentionDays.ONE_WEEK
+        )
+        
+        # Grant permissions to Lambda
+        deploy_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "sagemaker:DescribeModelPackage",
+                    "sagemaker:CreateModel",
+                    "sagemaker:CreateEndpoint",
+                    "sagemaker:CreateEndpointConfig",
+                    "sagemaker:UpdateEndpoint",
+                    "sagemaker:DescribeEndpoint",
+                    "sagemaker:DescribeModel",
+                    "sagemaker:DescribeEndpointConfig"
+                ],
+                resources=["*"]
+            )
+        )
+        
+        # Grant PassRole permission so Lambda can use the execution role
+        deploy_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                actions=["iam:PassRole"],
+                resources=[pipeline_role.role_arn]
+            )
+        )
+        
+        # EventBridge rule to trigger on model approval
+        approval_rule = events.Rule(
+            self, "ModelApprovalRule",
+            description="Trigger model deployment when model is approved",
+            event_pattern=events.EventPattern(
+                source=["aws.sagemaker"],
+                detail_type=["SageMaker Model Package State Change"],
+                detail={
+                    "ModelApprovalStatus": ["Approved"],
+                    "ModelPackageGroupName": [model_package_group.model_package_group_name]
+                }
+            )
+        )
+        
+        approval_rule.add_target(targets.LambdaFunction(deploy_lambda))
+        
         # Outputs
         CfnOutput(self, "BucketName", value=sagemaker_bucket.bucket_name)
         CfnOutput(self, "SageMakerDomainId", value=sagemaker_domain.attr_domain_id)
         CfnOutput(self, "PipelineName", value=sagemaker_pipeline.pipeline_name)
+        CfnOutput(self, "EndpointName", value="abalone-endpoint", description="SageMaker endpoint name for model deployment")
+        CfnOutput(self, "ModelPackageGroupName", value=model_package_group.model_package_group_name)

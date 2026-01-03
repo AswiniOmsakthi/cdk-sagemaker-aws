@@ -299,7 +299,7 @@ def handler(event, context):
         
         # Create endpoint configuration
         print(f"Creating endpoint config: {endpoint_config_name}")
-        sagemaker.create_endpoint_configuration(
+        sagemaker.create_endpoint_config(
             EndpointConfigName=endpoint_config_name,
             ProductionVariants=[{
                 'VariantName': 'AllTraffic',
